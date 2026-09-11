@@ -12,5 +12,5 @@ gameinfo
 	// LNC_BurnHandler and LNC_DropHandler existed, compiled, and never ran:
 	// GZDoom does not auto-register EventHandler subclasses. Burning deaths
 	// and the 2% core drop were both dead from the day they were written.
-	AddEventHandlers = "LNC_BurnHandler", "LNC_DropHandler"
+	AddEventHandlers = "LNC_BurnHandler", "LNC_LanceWorld", "LNC_DropHandler"
 }

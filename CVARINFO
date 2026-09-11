@@ -13,3 +13,35 @@
 // 1 = FIND CORES. Heat still drives the climb, but how far it can climb is
 //     your tier, and tiers come from the 2% drop.
 user int lnc_progression = 1;
+
+// ---- A THING IN THE ROOM, NOT ON THE SCREEN --------------------------------
+//
+// Draw the lance as a world actor on the controller rather than as a player
+// sprite. A psprite cannot be occluded by a doorframe, cannot take room light,
+// and cannot be seen by another player -- which for a beam weapon is most of
+// what you want others to see.
+//
+// Off puts it back on the psprite.
+user bool lnc_world = true;
+
+// WHERE IT SITS ON THE CONTROLLER. Read live by the renderer, which is what
+// lets the gun be dialled in while wearing the headset. NOTHING IN ZSCRIPT MAY
+// WRITE THESE: two writers on one transform reads exactly like a dead slider.
+//
+// Two sets, because the two hands hold it at different angles and one prefix
+// would mean tuning one and untuning the other.
+user float lnc_prop_ofs_x = 0.0;
+user float lnc_prop_ofs_y = 0.0;
+user float lnc_prop_ofs_z = 0.0;
+user float lnc_prop_yaw   = 0.0;
+user float lnc_prop_pitch = 0.0;
+user float lnc_prop_roll  = 0.0;
+user float lnc_prop_scale = 1.0;
+
+user float lnc_prop_off_ofs_x = 0.0;
+user float lnc_prop_off_ofs_y = 0.0;
+user float lnc_prop_off_ofs_z = 0.0;
+user float lnc_prop_off_yaw   = 0.0;
+user float lnc_prop_off_pitch = 0.0;
+user float lnc_prop_off_roll  = 0.0;
+user float lnc_prop_off_scale = 1.0;

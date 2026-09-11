@@ -71,3 +71,48 @@ Model LNC_LanceCore
 	FrameIndex PLAS A 0 0
 }
 
+// ---- THE WORLD PROPS --------------------------------------------------------
+//
+// The same mesh and the same frame table as the psprite blocks above, on actors
+// that ride the controller. FollowMainHand / FollowOffHand put the model in that
+// hand's frame and the renderer resolves it at DRAW rate -- which is why a prop
+// on a moving hand is as smooth as the hand, where script placing it once a tic
+// would visibly swim behind it.
+//
+// SAME NEGATIVE X SCALE as the psprite blocks: it mirrors the Bolter mesh, which
+// is authored for the other hand. Dropping the sign here would silently hand you
+// a mirrored gun.
+//
+// NO ZOffset. That existed to push the psprite down into view; a world actor is
+// placed by its hand frame and its placement sliders instead, and carrying the
+// offset across would sink the model through the controller.
+
+Model LNC_LanceProp
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	Scale -1.1 1.1 1.1
+	FollowMainHand
+	PlacementCVars lnc_prop
+	FrameIndex PLSC A 0 0
+	FrameIndex PLSC B 0 1
+	FrameIndex PLSC C 0 2
+	FrameIndex PLSF A 0 3
+	FrameIndex PLSF B 0 4
+}
+
+Model LNC_LancePropOff
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	Scale -1.1 1.1 1.1
+	FollowOffHand
+	PlacementCVars lnc_prop_off
+	FrameIndex PLSC A 0 0
+	FrameIndex PLSC B 0 1
+	FrameIndex PLSC C 0 2
+	FrameIndex PLSF A 0 3
+	FrameIndex PLSF B 0 4
+}

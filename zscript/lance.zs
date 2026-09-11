@@ -473,6 +473,33 @@ class LNC_Lance : Weapon
 	{
 		int base = SlotBase();
 
+		// ---- THE ORIGIN IS THE GUN, RESOLVED EVERY FRAME -------------------
+		//
+		// THIS IS THE JITTER FIX AND IT IS NOT A SMOOTHING PASS.
+		//
+		// `a` below is AttackPos, which hw_vrmodes.cpp rewrites from the live
+		// controller transform EVERY FRAME -- 90Hz and up. This code runs at 35.
+		// So every value of `a` handed to SetBeam is a stale sample of a value
+		// that has already moved on, and interpolating between two stale samples
+		// cannot recover the motion between them. The beam stepped while the
+		// world glided, and it got worse the faster you moved, because the
+		// disagreement grows with speed.
+		//
+		// Anchored, the renderer ignores the start point in SetBeam entirely and
+		// reads the hand's CURRENT position in the frame it is drawing. The beam
+		// leaves the muzzle and stays there.
+		//
+		// ONLY THE START IS ANCHORED. The far end is a hit location in the
+		// world, which genuinely only changes once a tic and is interpolated
+		// correctly already -- anchoring it too would drag the impact point
+		// around with your wrist.
+		//
+		// All three stacked beams share the muzzle, so all three anchor.
+		int anchor = (BeamSlot() == 1) ? 2 : 1;      // 2 = off hand, 1 = main
+		level.SetBeamAnchor(base + 0, anchor);
+		level.SetBeamAnchor(base + 1, anchor);
+		level.SetBeamAnchor(base + 2, anchor);
+
 		Vector3 axis = b - a;
 		double len = axis.Length();
 		if (len < 2.0) { ClearBeams(); return; }
@@ -577,7 +604,15 @@ class LNC_Lance : Weapon
 	{
 		int base = SlotBase();
 		for (int i = 0; i < 3; i++)
+		{
+			// ANCHOR OFF FIRST. A dark slot that is still anchored would hand
+			// the next thing to use it an origin stuck to a controller it never
+			// asked about -- and that beam would look right until you moved
+			// your arm. The engine clears these too when a slot goes dark, but
+			// a caller that releases its own slots should not rely on that.
+			level.SetBeamAnchor(base + i, 0);
 			level.SetBeam(base + i, (0, 0, 0), (0, 0, 0), 0.01, 0.01, 0, 0.0);
+		}
 
 		// The cook glow sits outside the three-layer block, so it has to be
 		// released here as well or a hot spot stays burning in mid-air after
@@ -1019,6 +1054,33 @@ class LNC_Lance : Weapon
 	override void DoEffect()
 	{
 		Super.DoEffect();
+
+		// ---- THE WORLD PROP DRAWS THE GUN NOW ------------------------------
+		//
+		// When lnc_world is on, an actor on the controller draws the lance and
+		// this layer must draw NOTHING, or there are two of them -- one in the
+		// room and one glued to your view.
+		//
+		// THE LAYER STAYS. It still runs every state: ready, the beam, the
+		// overheat, the cooldown, the tier bands and every SetBeam call are all
+		// this state machine, and the prop only copies the sprite and frame it
+		// lands on. Killing the layer would kill the weapon; making it invisible
+		// is the whole change.
+		//
+		// bNODRAW rather than parking it on TNT1, because the SPRITE and FRAME
+		// are what the prop reads -- PLSC vs PLSF is how it tells ready from
+		// overheated. A TNT1 state would report TNT1 A for everything and the
+		// gun would freeze on one pose.
+		if (owner && owner.player)
+		{
+			let psp = owner.player.FindPSprite(
+				bOffhandWeapon ? PSP_OFFHANDWEAPON : PSP_WEAPON);
+			if (psp)
+			{
+				let c = CVar.GetCVar("lnc_world", owner.player);
+				psp.bNODRAW = (c && c.GetBool());
+			}
+		}
 
 		// SAFETY: the beam lives in a level-global slot, so anything that
 		// ends a trigger pull without running the Beam state's exit -- dying

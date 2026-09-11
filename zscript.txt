@@ -3,3 +3,6 @@ version "4.14"
 #include "zscript/lance.zs"
 #include "zscript/burn.zs"
 #include "zscript/tier.zs"
+
+// The world props and what drives them. Last, because it names LNC_Lance.
+#include "zscript/world.zs"
