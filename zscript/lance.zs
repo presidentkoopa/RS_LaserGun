@@ -145,6 +145,10 @@ class LNC_Lance : Weapon
 	// of hold and two whole seconds in every band. The climb becomes
 	// something you commit to across a fight rather than a sprint.
 	const LNC_HEAT_MAX  = 100.0;
+	// Volumetric slot 0, stated rather than defaulted. The fog glow follows the lowest
+	// live slot (FLevelLocals::FirstVolBeam), so 0 keeps the Lance's look exactly;
+	// the torch holds 1 and the weapon wheel 2.
+	const VOLBEAM_SLOT = 0;
 	const LNC_HEAT_RISE = 10.0;    // per second firing -> 10.0s cold to max
 
 	// COOLING, AND IT IS FAST ON PURPOSE.
@@ -922,7 +926,8 @@ class LNC_Lance : Weapon
 					1.6,                      // falloff, tight near the lens
 					0.0,                      // dust: see above
 					0.045,
-					0.0);
+					0.0,
+					VOLBEAM_SLOT);         // its own slot, never the flashlight's or the wheel's
 			}
 		}
 
@@ -1023,7 +1028,7 @@ class LNC_Lance : Weapon
 		// must be switched off explicitly -- and only by the hand that
 		// claimed it, or the offhand releasing would kill the mainhand's.
 		if (BeamSlot() == 0)
-			level.ClearVolumetricBeam();
+			level.ClearVolumetricBeam(VOLBEAM_SLOT);
 
 		// Heat is NOT reset. That is the whole pulse-fire technique: the band
 		// you climbed to survives the release and only bleeds off with time.
