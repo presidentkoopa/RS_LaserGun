@@ -92,7 +92,7 @@ Model LNC_LanceProp
 	Path "models/Bolter"
 	Model 0 "Bolter.md3"
 	Skin 0 "bolter.png"
-	Scale -1.1 1.1 1.1
+	Scale -0.374 0.374 0.374
 	FollowMainHand
 	PlacementCVars lnc_prop
 	FrameIndex PLSC A 0 0
@@ -107,7 +107,7 @@ Model LNC_LancePropOff
 	Path "models/Bolter"
 	Model 0 "Bolter.md3"
 	Skin 0 "bolter.png"
-	Scale -1.1 1.1 1.1
+	Scale -0.374 0.374 0.374
 	FollowOffHand
 	PlacementCVars lnc_prop_off
 	FrameIndex PLSC A 0 0
