@@ -68,9 +68,12 @@
 // slot rather than calling ClearBeams(). Alternating hands is a real
 // technique: one cools while the other burns.
 //
-// ENGINE DEPENDENCY, stated plainly: Level.SetBeam / SetBeamCount /
-// SetBeamLook are natives of this fork, and the tracked-hand positions
-// (AttackPos / OffhandPos / OverrideAttackPosDir) come from its VR lineage.
+// ENGINE DEPENDENCY, stated plainly: Level.SetBeam / SetBeamAnchor /
+// ClaimBeam / ReleaseBeam / IsBeamClaimed / SetBeamStyleScroll are natives of
+// this fork, and the tracked-hand positions (AttackPos / OffhandPos /
+// OverrideAttackPosDir) come from its VR lineage. SetBeamStyleScroll is the
+// newest of them (2026-10-01) and exists because scroll depth was scene-wide,
+// so this weapon and the grab lasers could not both have the beam they want.
 // On stock GZDoom this file does not compile. That is the deal.
 // =====================================================================
 
@@ -388,16 +391,98 @@ class LNC_Lance : Weapon
 		return 0;
 	}
 
-	// Three slots per hand, contiguous: mainhand 0-2, offhand 3-5. The two
-	// that used to be spare are the cook glow, one per hand.
-	int SlotBase() { return BeamSlot() == 1 ? 3 : 0; }
-	int CookSlot() { return BeamSlot() == 1 ? 7 : 6; }
+	// ---- OUR FOUR SLOTS, CLAIMED, NOT ASSUMED ---------------------------
+	//
+	// This used to take slots 0-7 by number and set the scene-wide beam count
+	// and look itself. Both were wrong the moment anything else drew a beam,
+	// and something does: RS_WorldHands' grab lasers write slots 0 and 1 and
+	// force the count to 2 every tic (rs_grabviz.zs), from a handler that runs
+	// AFTER the weapon (p_tick.cpp runs P_PlayerThink before WorldTick). So
+	// the Lance's beam was being overwritten and counted out of existence on
+	// every tic it fired -- which is why it was very probably invisible in the
+	// owner's full load order rather than in isolation.
+	//
+	// Now: four slots claimed from the engine, three layers and the cook glow.
+	// The claim is ours until we release it or this weapon is destroyed, and
+	// nothing else can be handed it. Claims do NOT survive a map change or a
+	// savegame load, so HoldBeams re-claims when the map key moves -- the same
+	// shape WM_Unmaker uses (unmaker.zs HoldBeams).
+	int  lncBeam0, lncBeam1, lncBeam2, lncCook;
+	bool lncBeamHeld;
+	int  lncBeamMapKey;
 
-	// The frame-global beam count, covering every slot above. One owner for
-	// the whole mod -- SetBeamCount is a single value for the scene, so two
-	// callers disagreeing means whoever writes last shrinks the other out of
-	// existence. Never pass a literal; pass this.
-	const LNC_BEAM_COUNT = 8;
+	int MapKey() const { return level.totaltime - level.maptime; }
+
+	int LayerSlot(int i) const
+	{
+		return i == 2 ? lncBeam2 : (i == 1 ? lncBeam1 : lncBeam0);
+	}
+
+	bool HoldBeams()
+	{
+		if (lncBeamHeld && lncBeamMapKey == MapKey()
+			&& level.IsBeamClaimed(lncBeam0) && level.IsBeamClaimed(lncBeam1)
+			&& level.IsBeamClaimed(lncBeam2) && level.IsBeamClaimed(lncCook))
+			return true;
+
+		lncBeamHeld = false;
+		int s0 = level.ClaimBeam(self);
+		int s1 = level.ClaimBeam(self);
+		int s2 = level.ClaimBeam(self);
+		int sc = level.ClaimBeam(self);
+		if (s0 < 0 || s1 < 0 || s2 < 0 || sc < 0)
+		{
+			// All four or none: a partial claim would draw a stack missing a
+			// layer, which reads as a broken beam rather than as no beam.
+			if (s0 >= 0) level.ReleaseBeam(s0);
+			if (s1 >= 0) level.ReleaseBeam(s1);
+			if (s2 >= 0) level.ReleaseBeam(s2);
+			if (sc >= 0) level.ReleaseBeam(sc);
+			return false;
+		}
+
+		lncBeam0 = s0; lncBeam1 = s1; lncBeam2 = s2; lncCook = sc;
+		lncBeamMapKey = MapKey();
+		lncBeamHeld = true;
+
+		// OUR LOOK, PER SLOT, INCLUDING THE SCROLLING -- and the scrolling is
+		// the reason this needs SetBeamStyleScroll rather than SetBeamStyle.
+		//
+		// Scroll depth is the beading: main.fp does
+		//     bright *= 1.0 + depth * sin(along * 0.06 - timer*speed)
+		// and that sine is the ONLY periodic term in the whole beam shader.
+		// Wavelength is 2*pi/0.06 ~= 105 world units, so across a room it is
+		// about ten bright/dark bands: (gun) -0-0-0-0-0-. A capital-ship lance
+		// is one solid unbroken bar, so depth is ZERO here and it stays zero.
+		// The engine's scene default is 0.25 and the grab lasers want 0.25,
+		// which is right for them -- beads are what a grab laser should look
+		// like. Both can now be true at once, which is the whole point of the
+		// per-slot form.
+		//
+		// Speed is kept non-zero so that turning depth on to look at something
+		// does not also need this line changed.
+		//
+		// airGlow, halo, taper, flare. The sheath is wide and soft, the core
+		// tight and bright, the filament thin and dim; none of them taper much,
+		// because a lance is a bar and not a cone.
+		level.SetBeamStyleScroll(lncBeam0, 1.00, 0.85, 0.10, 1.20, 6.0, 0.0);
+		level.SetBeamStyleScroll(lncBeam1, 1.00, 0.35, 0.10, 1.40, 6.0, 0.0);
+		level.SetBeamStyleScroll(lncBeam2, 0.80, 0.25, 0.10, 1.00, 6.0, 0.0);
+		// The cook glow is a hot spot on the thing being burned, not a line:
+		// all halo, no taper, and a strong flare where it lands.
+		level.SetBeamStyleScroll(lncCook, 1.00, 1.00, 0.00, 2.00, 6.0, 0.0);
+		return true;
+	}
+
+	void DropBeams()
+	{
+		if (!lncBeamHeld) return;
+		level.ReleaseBeam(lncBeam0);
+		level.ReleaseBeam(lncBeam1);
+		level.ReleaseBeam(lncBeam2);
+		level.ReleaseBeam(lncCook);
+		lncBeamHeld = false;
+	}
 
 	// ---- THE COOK -------------------------------------------------------
 	//
@@ -439,7 +524,8 @@ class LNC_Lance : Weapon
 
 		// Given a hair of length rather than a true zero, so nothing in the
 		// air-glow pass has to divide by a null direction.
-		level.SetBeam(CookSlot(), where, where + (0, 0, 0.05),
+		if (!HoldBeams()) return;
+		level.SetBeam(lncCook, where, where + (0, 0, 0.05),
 			0.25 + 3.00 * g,
 			0.40 + 5.00 * g,
 			col,
@@ -475,7 +561,8 @@ class LNC_Lance : Weapon
 	void DrawBeamStack(Vector3 a, Vector3 b, int band, double flash,
 		Color col, Color innerCol)
 	{
-		int base = SlotBase();
+		// No slots, no beam. Better than drawing into someone else's.
+		if (!HoldBeams()) return;
 
 		// ---- THE ORIGIN IS THE GUN, RESOLVED EVERY FRAME -------------------
 		//
@@ -500,9 +587,9 @@ class LNC_Lance : Weapon
 		//
 		// All three stacked beams share the muzzle, so all three anchor.
 		int anchor = (BeamSlot() == 1) ? 2 : 1;      // 2 = off hand, 1 = main
-		level.SetBeamAnchor(base + 0, anchor);
-		level.SetBeamAnchor(base + 1, anchor);
-		level.SetBeamAnchor(base + 2, anchor);
+		level.SetBeamAnchor(lncBeam0, anchor);
+		level.SetBeamAnchor(lncBeam1, anchor);
+		level.SetBeamAnchor(lncBeam2, anchor);
 
 		Vector3 axis = b - a;
 		double len = axis.Length();
@@ -532,7 +619,7 @@ class LNC_Lance : Weapon
 		// A tier-1 laser wants to be thin and precise. It earns its width by
 		// climbing the ladder, not by default.
 		double sheathThick = 0.9 + 0.45 * step + 0.8 * flash;
-		level.SetBeam(base + 0, a, b,
+		level.SetBeam(lncBeam0, a, b,
 			sheathThick,
 			1.6 + 0.8 * step + 1.2 * flash,      // soft: reach ~14 units cold
 			col,
@@ -581,7 +668,7 @@ class LNC_Lance : Weapon
 		// is the motion that was wanted in the first place.
 		double coreRad = 0.9 + 0.5 * step + 0.8 * flash;
 		Vector3 coreOff = (u * cos(coreAng) + v * sin(coreAng)) * coreRad;
-		level.SetBeam(base + 1, a, b + coreOff,
+		level.SetBeam(lncBeam1, a, b + coreOff,
 			0.42 + 0.16 * step + 0.7 * flash,
 			0.55 + 0.24 * step + 0.8 * flash,
 			innerCol,
@@ -597,7 +684,7 @@ class LNC_Lance : Weapon
 		double filAng = 140.0 - Level.maptime * (1.5 + 0.35 * step);
 		double filRad = 1.5 + 0.7 * step + 1.1 * flash;
 		Vector3 filOff = (u * cos(filAng) + v * sin(filAng)) * filRad;
-		level.SetBeam(base + 2, a, b + filOff,
+		level.SetBeam(lncBeam2, a, b + filOff,
 			0.20 + 0.08 * step,
 			0.38 + 0.16 * step + 0.5 * flash,
 			innerCol,
@@ -606,7 +693,11 @@ class LNC_Lance : Weapon
 
 	void ClearBeams()
 	{
-		int base = SlotBase();
+		// Nothing claimed means nothing of ours is drawn, so there is nothing
+		// to blank -- and blanking by number here is exactly what used to walk
+		// over another mod's slots.
+		if (!lncBeamHeld) { cookTarget = null; cookAmt = 0.0; return; }
+
 		for (int i = 0; i < 3; i++)
 		{
 			// ANCHOR OFF FIRST. A dark slot that is still anchored would hand
@@ -614,17 +705,23 @@ class LNC_Lance : Weapon
 			// asked about -- and that beam would look right until you moved
 			// your arm. The engine clears these too when a slot goes dark, but
 			// a caller that releases its own slots should not rely on that.
-			level.SetBeamAnchor(base + i, 0);
-			level.SetBeam(base + i, (0, 0, 0), (0, 0, 0), 0.01, 0.01, 0, 0.0);
+			level.SetBeamAnchor(LayerSlot(i), 0);
+			level.SetBeam(LayerSlot(i), (0, 0, 0), (0, 0, 0), 0.01, 0.01, 0, 0.0);
 		}
 
 		// The cook glow sits outside the three-layer block, so it has to be
 		// released here as well or a hot spot stays burning in mid-air after
 		// the trigger comes up. Forgetting the target with it means the next
 		// thing you touch starts cold instead of inheriting this one's cook.
-		level.SetBeam(CookSlot(), (0, 0, 0), (0, 0, 0), 0.01, 0.01, 0, 0.0);
+		level.SetBeam(lncCook, (0, 0, 0), (0, 0, 0), 0.01, 0.01, 0, 0.0);
 		cookTarget = null;
 		cookAmt = 0.0;
+
+		// The slots stay CLAIMED while the weapon lives. Releasing them on
+		// every trigger release would hand them to whatever asked next and make
+		// the following shot fight for them again -- and the engine releases
+		// them for us when this weapon is destroyed, because the claim named an
+		// owner. Blanked, not given back.
 	}
 
 	// ---- colour ---------------------------------------------------------
@@ -839,47 +936,30 @@ class LNC_Lance : Weapon
 		Color col      = LNC_Lance.LerpCol(w.CoreColor(),  0xFFFFFF, flash);
 		Color innerCol = LNC_Lance.LerpCol(w.HelixColor(), 0xFFFFFF, flash);
 
-		// FRAME-GLOBAL, BOTH OF THESE. SetBeamCount's glow term and every
-		// SetBeamLook value cover EVERY beam in the scene -- they are single
-		// vec4s in the viewpoint block, not arrays. If a second beam user
-		// ever exists, these want one owner rather than each actor stomping
-		// the others every tic.
-		// EIGHT: three layers per hand (0-5) plus a cook glow per hand (6-7).
+		// NO SCENE-WIDE BEAM CALLS HERE ANY MORE.
 		//
-		// It was 64 while the Lash held 8-15 and the buckler 16-63. Both are
-		// gone, and this number is what the shader loops to -- a slot below
-		// the count still pays a bounding-sphere test per pixel even when it
-		// is zeroed, so leaving it at 64 would have bought fifty-six dead
-		// tests on every fragment of every frame.
+		// This used to call SetBeamCount(8, ...) and SetBeamLook(...), both of
+		// which are single vec4s covering EVERY beam in the scene rather than
+		// arrays. That made the Lance the de-facto owner of the whole scene's
+		// beam look, and it lost that fight anyway: RS_WorldHands' grab lasers
+		// force the count to 2 and rewrite the look every tic from a handler
+		// that runs after the weapon, so the Lance beam was counted out of
+		// existence whenever the grab lasers were on -- which is their default.
 		//
-		// Slots are zeroed on release rather than left holding stale
-		// endpoints, or a holstered hand's beam would keep being drawn.
-		level.SetBeamCount(LNC_BEAM_COUNT, 0.28, 1.0);
-
-		level.SetBeamLook(
-			0.45 + 0.55 * charge,         // air glow
-
-			// SCROLL SPEED is irrelevant while depth is zero, but kept
-			// non-zero so turning depth back on does not also need this.
-			6.0,
-
-			// SCROLL DEPTH: ZERO, AND IT STAYS ZERO.
-			//
-			// This is the beading. main.fp does
-			//     bright *= 1.0 + uBeamFX.y * sin(along * 0.06 - timer*speed)
-			// and that sine is the ONLY periodic term in the entire beam
-			// shader -- BeamLightAt, the surface half, is pure distance
-			// falloff with nothing repeating in it. Wavelength is
-			// 2*pi/0.06 ~= 105 world units, so across a room it is about ten
-			// bright/dark bands: (gun) -0-0-0-0-0-. Reducing it only made
-			// them fainter, which is not the same as a beam. A capital-ship
-			// lance is one solid unbroken bar, and the shader draws exactly
-			// that the moment this is switched off. The engine skips the
-			// whole block on zero, so this is genuinely off, not small.
-			0.0,
-
-			0.45 - 0.30 * charge,         // taper, slackening as it heats
-			1.2 + 0.35 * step);           // impact flare, stepping with band
+		// The four slots are claimed in HoldBeams() and styled per slot there,
+		// scrolling included, so nothing outside this weapon can change how the
+		// Lance looks and the Lance changes nothing outside itself. The engine
+		// keeps a claimed slot live regardless of SetBeamCount.
+		//
+		// Charge and band used to feed the scene look (air glow rose with charge,
+		// taper slackened as it heated, flare stepped with the band). Those are
+		// per-slot values now, and they are deliberately NOT re-applied per tic:
+		// a style set once at claim time is one call a map instead of four a tic,
+		// and the band already changes width, brightness, orbit and colour in
+		// DrawBeamStack, which is where the weapon reads as intensifying. If the
+		// owner wants the glow to climb with charge again, call
+		// SetBeamStyleScroll on the three layer slots from here with the charge
+		// term back in -- it is per-slot, so it is now safe to do.
 
 		// THE THREE LAYERS -- sheath, stirred core, counter-rotating filament.
 		// See DrawBeamStack for the shape and why it replaced the helix.
@@ -1083,7 +1163,13 @@ class LNC_Lance : Weapon
 			if (psp)
 			{
 				let c = CVar.GetCVar("lnc_world", owner.player);
-				psp.bNODRAW = (c && c.GetBool());
+				// NoDraw, NOT bNODRAW. PSprite's field is a plain native bool
+				// (player.zs:3364) and has no b-prefixed flag twin, so `bNODRAW`
+				// was an unknown identifier and it failed the WHOLE file -- which
+				// is why RS_Lance has not compiled in some time and why it is not
+				// in the owner's load order. Found 2026-10-01 while verifying the
+				// beam claim change; not in CODER_PLAN.
+				psp.NoDraw = (c && c.GetBool());
 			}
 		}
 
