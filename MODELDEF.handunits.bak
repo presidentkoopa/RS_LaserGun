@@ -1,0 +1,118 @@
+// MODELDEF binds by CLASS NAME, so the offhand copy needs its own block
+// even though it is the identical model, skin, scale and offsets. That is
+// also why RS_Main carries six of these -- one per tier variant.
+//
+// Scale X is NEGATIVE (-1.1) on purpose: it mirrors the model. The Bolter
+// mesh is built for the other hand, and mirroring is cheaper and more
+// reliable than re-exporting it.
+//
+// The frame indices below are what let the states drive the model: PLSC A/B/C
+// and PLSF A/B are the sprite names the Ready / Overheated / Beam states use,
+// each mapped to a mesh frame. The sprites themselves still have to exist as
+// lumps even though the model replaces them.
+
+Model LNC_Lance
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	Scale -1.1 1.1 1.1
+	ZOffset -6
+	FrameIndex PLSC A 0 0
+	FrameIndex PLSC B 0 1
+	FrameIndex PLSC C 0 2
+	FrameIndex PLSF A 0 3
+	FrameIndex PLSF B 0 4
+}
+
+Model LNC_LanceOffhand
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	Scale -1.1 1.1 1.1
+	ZOffset -6
+	FrameIndex PLSC A 0 0
+	FrameIndex PLSC B 0 1
+	FrameIndex PLSC C 0 2
+	FrameIndex PLSF A 0 3
+	FrameIndex PLSF B 0 4
+}
+
+// THE DROPPED CORE IS THE GUN ITSELF.
+//
+// There is no Bolter pickup SPRITE anywhere in the art source -- the
+// meatgrinder set has only the HUD frames, which this same model replaces.
+// Rather than substitute a plasma-rifle pickup that looks like a different
+// weapon, the pickup class wears the model: what is lying on the floor is
+// visibly the thing you are about to weld into your own gun.
+//
+// SCALE X IS POSITIVE here, unlike the two weapon entries above. Those are
+// negative to mirror the mesh for the hand it is held in; a pickup lying in
+// the world has no hand and mirroring it would just make the receiver face
+// the wrong way.
+//
+// RollOffset lays it on its side so it reads as dropped rather than
+// hovering at attention. The slow spin is done in ZScript (LNC_LanceCore's
+// Tick) rather than here, since MODELDEF has no way to animate a rotation.
+Model LNC_LanceCore
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	// SCALE 0.7 -- half of the 1.4 this used to be. The larger figure was
+	// reasoning about a core seen across a room, but in practice you meet it
+	// at your feet, where 1.4 was a rifle the size of a body lying on the
+	// floor. This is the number to change if it reads wrong; nothing else
+	// here affects how big it looks.
+	Scale 0.7 0.7 0.7
+	ZOffset 0
+	RollOffset 90
+	FrameIndex PLAS A 0 0
+}
+
+// ---- THE WORLD PROPS --------------------------------------------------------
+//
+// The same mesh and the same frame table as the psprite blocks above, on actors
+// that ride the controller. FollowMainHand / FollowOffHand put the model in that
+// hand's frame and the renderer resolves it at DRAW rate -- which is why a prop
+// on a moving hand is as smooth as the hand, where script placing it once a tic
+// would visibly swim behind it.
+//
+// SAME NEGATIVE X SCALE as the psprite blocks: it mirrors the Bolter mesh, which
+// is authored for the other hand. Dropping the sign here would silently hand you
+// a mirrored gun.
+//
+// NO ZOffset. That existed to push the psprite down into view; a world actor is
+// placed by its hand frame and its placement sliders instead, and carrying the
+// offset across would sink the model through the controller.
+
+Model LNC_LanceProp
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	Scale -1.1 1.1 1.1
+	FollowMainHand
+	PlacementCVars lnc_prop
+	FrameIndex PLSC A 0 0
+	FrameIndex PLSC B 0 1
+	FrameIndex PLSC C 0 2
+	FrameIndex PLSF A 0 3
+	FrameIndex PLSF B 0 4
+}
+
+Model LNC_LancePropOff
+{
+	Path "models/Bolter"
+	Model 0 "Bolter.md3"
+	Skin 0 "bolter.png"
+	Scale -1.1 1.1 1.1
+	FollowOffHand
+	PlacementCVars lnc_prop_off
+	FrameIndex PLSC A 0 0
+	FrameIndex PLSC B 0 1
+	FrameIndex PLSC C 0 2
+	FrameIndex PLSF A 0 3
+	FrameIndex PLSF B 0 4
+}

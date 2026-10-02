@@ -1,10 +1,12 @@
 // The Lance -- four sounds, namespaced so this drops into any mod without
 // colliding with its sound names.
 //
-// lnc/loop is the one that matters: it is started with CHANF_LOOPING on
-// CHAN_5 when the trigger goes down and pitched every tic after, so the
-// approaching cook-off is audible before it is visible. CHAN_5 rather than
-// a lower channel so it does not fight a mod's own weapon or item sounds.
+// lnc/loop is the one that matters: it is started with CHANF_LOOPING when the
+// trigger goes down and pitched every tic after, so the approaching cook-off
+// is audible before it is visible. Each hand loops on its own high channel
+// (lance.zs LOOP_CHAN_MAIN / LOOP_CHAN_OFF). It used to share CHAN_5 -- which
+// is the engine's CHAN_OFFWEAPON -- so it fought the offhand's own sounds and
+// the two hands fought each other.
 
 lnc/charge    PLCHRG
 // THE BEAM VOICE. Cut from the sustain body of a Klingon disruptor (0.13-0.59s

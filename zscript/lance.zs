@@ -92,6 +92,13 @@ class LNC_Lance : Weapon
 
 	bool firing;          // was the beam live last tic, for edge detection
 
+	// THE CHANNEL THE LOOP IS ACTUALLY PLAYING ON, latched the tic it starts.
+	// Deliberately NOT re-derived when stopping it: DoEffect's safety Release
+	// runs precisely when this weapon has LEFT the hand, so asking "which hand
+	// am I?" at that point answers with the other hand's channel and the loop
+	// goes on playing forever with nothing on screen to explain it.
+	int activeLoopChan;
+
 	// Fractional damage carried between tics. Doom's damage is an integer
 	// event but a beam's damage is a rate; this is where the remainder
 	// lives so the rate comes out exact rather than truncated to nothing.
@@ -390,6 +397,23 @@ class LNC_Lance : Weapon
 		if (owner && owner.player && owner.player.OffhandWeapon == self) return 1;
 		return 0;
 	}
+
+	// ONE LOOP CHANNEL PER HAND, AND NEITHER OF THEM THE ENGINE'S.
+	//
+	// The loop used to run on CHAN_5 for both hands, which was wrong twice
+	// over. CHAN_5 *is* CHAN_OFFWEAPON (engine base.zs): A_StartSound moves an
+	// offhand weapon's CHAN_WEAPON sounds onto 5, so the offhand Lance's own
+	// charge sound -- and every offhand sound any other mod plays -- landed on
+	// top of the loop and cut it. And with both hands sharing one channel, the
+	// second Lance to fire restarted the first's loop, the two per-tic pitch
+	// writes fought each other, and releasing either trigger silenced both.
+	//
+	// Numbers of our own, clear of the engine's 0..7 block and of
+	// RS_Lightsaber's hum channels (20, 21), since both can be held at once.
+	const LOOP_CHAN_MAIN = 22;
+	const LOOP_CHAN_OFF  = 23;
+
+	int LoopChan() { return BeamSlot() == 1 ? LOOP_CHAN_OFF : LOOP_CHAN_MAIN; }
 
 	// ---- OUR FOUR SLOTS, CLAIMED, NOT ASSUMED ---------------------------
 	//
@@ -1017,10 +1041,11 @@ class LNC_Lance : Weapon
 		if (!w.firing)
 		{
 			A_StartSound("lnc/charge", CHAN_WEAPON, 0, 0.7);
-			A_StartSound("lnc/loop", CHAN_5, CHANF_LOOPING, 0.8, ATTN_NORM);
+			w.activeLoopChan = w.LoopChan();
+			A_StartSound("lnc/loop", w.activeLoopChan, CHANF_LOOPING, 0.8, ATTN_NORM);
 			w.firing = true;
 		}
-		A_SoundPitch(CHAN_5, 0.85 + 0.55 * charge);
+		A_SoundPitch(w.activeLoopChan, 0.85 + 0.55 * charge);
 
 		// ---- the burn --------------------------------------------------
 		//
@@ -1094,9 +1119,10 @@ class LNC_Lance : Weapon
 	{
 		if (firing)
 		{
-			// CHAN_5, MATCHING THE LOOP. Stopping a different channel than
-			// the loop was started on leaves it running forever.
-			if (who) who.A_StopSound(CHAN_5);
+			// THE CHANNEL THE LOOP WAS STARTED ON, not the one this hand would
+			// choose now. Stopping a different channel than the loop was started
+			// on leaves it running forever.
+			if (who) who.A_StopSound(activeLoopChan);
 			firing = false;
 		}
 		// All three of this hand's layers. The count stays at 6 once
